@@ -8,7 +8,7 @@
 
 ## 前言
 
-有关 APM 的技术文章非常多，但大部分文章都只是浅尝辄止，并未对实现细节进行深挖。本文旨在通过剖析 SDK 具体实现细节，揭露知名 APM 厂商的 iOS SDK 背后的秘密。
+有关 APM 的技术文章非常多，但大部分文章都只是浅尝辄止，并未对实现细节进行深挖。本文旨在通过剖析 SDK 具体实现细节，揭露知名 APM 厂商的 iOS SDK 背后的秘密。分析的 APM SDK 有**听云**, **OneAPM** 和 **Firebase Performance Monitoring** 等。
 
 ## 页面渲染时间
 
@@ -188,6 +188,90 @@ void +[_priv_NBSUIAgent hook_viewDidLoad:](void * self, void * _cmd, void * arg2
 
 ```
 
-`hook_viewDidLoad:` 方法中的参数 `arg2` 即是要 hook 的 `ViewController` 的类，获取 `arg2` 的类名并赋给 `rbx` 寄存器，然后利用 `rbx` 构造字符串 `nbs_%s_viewDidLoad`，如 `nbs_XXViewController_viewDidLoad`，获得该字符串的 selector 后赋给 `var_C0`，下面几句中的 `__NSConcreteStackBlock` 是创建的存储栈的 block 对象，这个 block 之后会通过 `imp_implementationWithBlock` 方法获取到 IMP 函数指针，`_nbs_Swizzle_orReplaceWithIMPs` 是实现方法交换的函数，参数依次为：`arg2` 是 `ViewController` 的类；`@selector(viewDidLoad)` 是 `viewDidLoad` 的 selector；var_C0 是 `nbs_%s_viewDidLoad` 的 selector，`r14` 是第二个 `__NSConcreteStackBlock` 的 IMP；var_D0 是第一个 `__NSConcreteStackBlock` 的 IMP。
+`hook_viewDidLoad:` 方法中的参数 `arg2` 即是要 hook 的 `ViewController` 的类，获取 `arg2` 的类名并赋给 `rbx` 寄存器，然后利用 `rbx` 构造字符串 `nbs_%s_viewDidLoad`，如 `nbs_XXViewController_viewDidLoad`，获得该字符串的 selector 后赋给 `var_C0`，下面几句中的 `__NSConcreteStackBlock` 是创建的存储栈的 block 对象，这个 block 之后会通过 `imp_implementationWithBlock` 方法获取到 IMP 函数指针，`_nbs_Swizzle_orReplaceWithIMPs` 是实现方法交换的函数，参数依次为：`arg2` 是 `ViewController` 的类；`@selector(viewDidLoad)` 是 `viewDidLoad` 的 selector；`var_C0` 是 `nbs_%s_viewDidLoad` 的 selector，`r14` 是第二个 `__NSConcreteStackBlock` 的 IMP；`var_D0` 是第一个 `__NSConcreteStackBlock` 的 IMP。
 
-`hook_viewDidLoad:` 的整个逻辑大致清楚了，不过这里有个问题为什么不直接交换两个 IMP，而是要先构造两个 block，然后交换两个 block 的 IMP呢？原因是需要将 `ViewController` 的父类也就是 `class_getSuperclass` 的结果作为参数传递给交换后的方法，这样交换的两个 selector 签名的参数个数不一致，需要通过构造 block 去巧妙的解决这个问题，而事实上第二个 `__NSConcreteStackBlock` 的执行的就是 `_priv_NBSUIHookMatrix` 的 `nbs_jump_viewDidLoad:superClass:` 方法，正如之前所说的，这个方法的参数中有 `superClass`，至于为什么需要这个参数，稍后再做介绍。
+`hook_viewDidLoad:` 的整个逻辑大致清楚了，不过这里有个问题为什么不直接交换两个 IMP，而是要先构造两个 block，然后交换两个 block 的 IMP呢？原因是需要将 `ViewController` 的父类也就是 `class_getSuperclass` 的结果作为参数传递给交换后的方法，这样交换的两个 selector 签名的参数个数不一致，需要通过构造 block 去巧妙的解决这个问题，而事实上第一个 `__NSConcreteStackBlock` 的执行的就是 `_priv_NBSUIHookMatrix` 的 `nbs_jump_viewDidLoad:superClass:` 方法，正如之前所说的，这个方法的参数中有 `superClass`，至于为什么需要这个参数，稍后再做介绍。
+
+为什么第二个 `__NSConcreteStackBlock` 的执行的是 `nbs_jump_viewDidLoad:superClass:` 方法呢？取消勾选 Hopper 的 `Remove potentially dead code` 选项，代码如下：
+
+```
+void +[_priv_NBSUIAgent hook_viewDidLoad:](void * self, void * _cmd, void * arg2) {
+    rsi = _cmd;
+    rdi = self;
+    r12 = _objc_msgSend;
+    rax = [_priv_NBSUIHookMatrix class];
+    rsi = @selector(nbs_jump_viewDidLoad:superClass:);
+    rdi = rax;
+    var_D8 = _nbs_getInstanceImpOf();
+    rdi = arg2;
+    rsi = @selector(viewDidLoad);
+    var_D0 = _nbs_getInstanceImpOf();
+    rbx = class_getName(arg2);
+    r14 = class_getSuperclass(arg2);
+    LODWORD(rax) = 0x0;
+    rax = [NSString stringWithFormat:@"nbs_%s_viewDidLoad", rbx];
+    rax = [rax retain];
+    var_B8 = rax;
+    var_C0 = NSSelectorFromString(rax);
+    var_60 = 0xc0000000;
+    var_5C = 0x0;
+    var_58 = ___37+[_priv_NBSUIAgent hook_viewDidLoad:]_block_invoke;
+    var_50 = ___block_descriptor_tmp;
+    var_48 = var_D8;
+    var_40 = @selector(viewDidLoad);
+    var_38 = var_D0;
+    var_30 = r14;
+    r12 = objc_retainBlock(__NSConcreteStackBlock);
+    var_D0 = imp_implementationWithBlock(r12);
+    r13 = _objc_release;
+    rax = [r12 release];
+    var_A8 = 0xc0000000;
+    var_A4 = 0x0;
+    var_A0 = ___37+[_priv_NBSUIAgent hook_viewDidLoad:]_block_invoke_2;
+    var_98 = ___block_descriptor_tmp47;
+    var_90 = rbx;
+    var_88 = var_D8;
+    var_80 = @selector(viewDidLoad);
+    var_78 = r14;
+    var_70 = arg2;
+    rbx = objc_retainBlock(__NSConcreteStackBlock);
+    r14 = imp_implementationWithBlock(rbx);
+    rax = [rbx release];
+    rax = _nbs_Swizzle_orReplaceWithIMPs(arg2, @selector(viewDidLoad), var_C0, r14, var_D0);
+    rax = [var_B8 release];
+    rsp = rsp + 0xb8;
+    rbx = stack[2047];
+    r12 = stack[2046];
+    r13 = stack[2045];
+    r14 = stack[2044];
+    r15 = stack[2043];
+    rbp = stack[2042];
+    return;
+}
+```
+
+再来看 `_nbs_getInstanceImpOf` 的代码：
+
+```
+void _nbs_getInstanceImpOf() {
+    rax = class_getInstanceMethod(rdi, rsi);
+    method_getImplementation(rax);
+    return;
+}
+```
+`_nbs_getInstanceImpOf` 函数的作用很明显，获取 `rdi` 类中 `rsi` selector 的 IMP，读者会发现在 `hook_viewDidLoad:` 方法中共调用了两次 `_nbs_getInstanceImpOf`，第一次 `rdi` 是 `_priv_NBSUIHookMatrix` 类，`rdx` 是 `@selector(nbs_jump_viewDidLoad:superClass:)`，第二次 `rdi` 是 `ViewController` 类，`rdx` 是 `@selector(viewDidLoad)`。
+
+接下来看第一个 `__NSConcreteStackBlock`，也就是会调用 `nbs_jump_viewDidLoad:superClass:` 的 block，代码如下：
+
+```
+int ___37+[_priv_NBSUIAgent hook_viewDidLoad:]_block_invoke(int arg0, int arg1) {
+    r8 = *(arg0 + 0x20);
+    rax = *(arg0 + 0x28);
+    rdx = *(arg0 + 0x30);
+    rcx = *(arg0 + 0x38);
+    rax = (r8)(arg1, rax, rdx, rcx, r8);
+    return rax;
+}
+```
+
+`r8` 寄存器是 `nbs_jump_viewDidLoad:superClass:` 的 IMP，这段代码只是调用这个 IMP。IMP 函数的参数与 `nbs_jump_viewDidLoad:superClass:` 相同。
