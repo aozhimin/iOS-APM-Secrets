@@ -188,4 +188,6 @@ void +[_priv_NBSUIAgent hook_viewDidLoad:](void * self, void * _cmd, void * arg2
 
 ```
 
-`hook_viewDidLoad:` 方法中的参数 `arg2` 即是要 hook 的 `ViewController` 的类，
+`hook_viewDidLoad:` 方法中的参数 `arg2` 即是要 hook 的 `ViewController` 的类，获取 `arg2` 的类名并赋给 `rbx` 寄存器，然后利用 `rbx` 构造字符串 `nbs_%s_viewDidLoad`，如 `nbs_XXViewController_viewDidLoad`，获得该字符串的 selector 后赋给 `var_C0`，下面几句中的 `__NSConcreteStackBlock` 是创建的存储栈的 block 对象，这个 block 之后会通过 `imp_implementationWithBlock` 方法获取到 IMP 函数指针，`_nbs_Swizzle_orReplaceWithIMPs` 是实现方法交换的函数，参数依次为：`arg2` 是 `ViewController` 的类；`@selector(viewDidLoad)` 是 `viewDidLoad` 的 selector；var_C0 是 `nbs_%s_viewDidLoad` 的 selector，`r14` 是第二个 `__NSConcreteStackBlock` 的 IMP；var_D0 是第一个 `__NSConcreteStackBlock` 的 IMP。
+
+`hook_viewDidLoad:` 的整个逻辑大致清楚了，不过这里有个问题为什么不直接交换两个 IMP，而是要先构造两个 block，然后交换两个 block 的 IMP呢？原因是需要将 `ViewController` 的父类也就是 `class_getSuperclass` 的结果作为参数传递给交换后的方法，这样交换的两个 selector 签名的参数个数不一致，需要通过构造 block 去巧妙的解决这个问题，而事实上第二个 `__NSConcreteStackBlock` 的执行的就是 `_priv_NBSUIHookMatrix` 的 `nbs_jump_viewDidLoad:superClass:` 方法，正如之前所说的，这个方法的参数中有 `superClass`，至于为什么需要这个参数，稍后再做介绍。
