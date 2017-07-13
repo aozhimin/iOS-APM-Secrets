@@ -33,3 +33,59 @@
                                        ;     +start
                                        ; }
 ```
+
+我们先将目光转到另外一个更可疑的方法：`hookSubOfController`，具体实现如下：
+
+```
+void +[_priv_NBSUIAgent hookSubOfController](void * self, void * _cmd) {
+    r14 = self;
+    r12 = [_subMetaClassNamesInMainBundle_c("UIViewController") retain];
+    var_C0 = r12;
+    if ((r12 != 0x0) && ([r12 count] != 0x0)) {
+            var_C8 = object_getClass(r14);
+            if ([r12 count] != 0x0) {
+                    r15 = @selector(nbs_jump_initialize:);
+                    rdx = 0x0;
+                    do {
+                            var_98 = rdx;
+                            r12 = [[r12 objectAtIndexedSubscript:rdx, rcx, r8] retain];
+                            [r12 release];
+                            if ([r12 respondsToSelector:r15, rcx, r8] == 0x0) {
+                                    _hookClass_CopyAMetaMethod();
+                            }
+                            r13 = class_getName(r12);
+                            rax = [NSString stringWithFormat:@"nbs_%s_initialize", r13];
+                            rax = [rax retain];
+                            var_A0 = rax;
+                            rax = NSSelectorFromString(rax);
+                            var_B0 = rax;
+                            rax = objc_retainBlock(__NSConcreteStackBlock);
+                            var_A8 = rax;
+                            r15 = objc_retainBlock(rax);
+                            var_B8 = imp_implementationWithBlock(r15);
+                            [r15 release];
+                            rax = class_getSuperclass(r12);
+                            r15 = objc_retainBlock(__NSConcreteStackBlock);
+                            rbx = objc_retainBlock(r15);
+                            r13 = imp_implementationWithBlock(rbx);
+                            [rbx release];
+                            rcx = r13;
+                            r8 = var_B8;
+                            _nbs_Swizzle_orReplaceWithIMPs(r12, @selector(initialize), var_B0, rcx, r8);
+                            rdi = r15;
+                            r15 = @selector(nbs_jump_initialize:);
+                            [rdi release];
+                            [var_A8 release];
+                            [var_A0 release];
+                            rax = [var_C0 count];
+                            r12 = var_C0;
+                            rdx = var_98 + 0x1;
+                    } while (var_98 + 0x1 < rax);
+            }
+    }
+    [r12 release];
+    return;
+}
+```
+
+从 `_subMetaClassNamesInMainBundle_c` 的命名和传入的 "UIViewController" 参数，基本可以推断这个 C 函数是获取 MainBundle 中所有 `UIViewController` 的子类。
