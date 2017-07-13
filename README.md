@@ -91,3 +91,101 @@ void +[_priv_NBSUIAgent hookSubOfController](void * self, void * _cmd) {
 从 `_subMetaClassNamesInMainBundle_c` 的命名和传入的 "UIViewController" 参数，基本可以推断这个 C 函数是获取 MainBundle 中所有 `UIViewController` 的子类。而事实上，如果通过 LLDB 在这个函数 Call 完之后的那行汇编代码下断点，会发现返回的确实是 `UIViewController` 子类的数组。下面的 `if` 语句判断 `r12` 寄存器不为 `nil` 并且 `r12` 寄存器的 `count` 不等于0才执行 `if` 里面的逻辑，而 `r12` 寄存器存放的正是 `_subMetaClassNamesInMainBundle_c` 函数的返回值，也就是 `UIViewController` 子类的数组。
 
 下面再来重点看看里面的 `do-while` 循环语句，循环判断的语句为 `var_98 + 0x1 < rax`，`var_98` 在循环开始的位置赋值 `rdx` 寄存器，`rdx` 寄存器在循环外初始化为0，所以 `var_98` 就是计数器，而 `rax` 寄存器则是赋值为 `r12` 寄存器的 `count` 方法，依此得出这个 `do-while` 循环实际就是遍历 `UIViewController` 子类的数组。遍历的行为则是通过 `_nbs_Swizzle_orReplaceWithIMPs` 实现 `initialize` 和 `nbs_jump_initialize:` 的方法交换。
+
+`nbs_jump_initialize` 的代码如下：
+
+```
+void +[_priv_NBSUIAgent nbs_jump_initialize:](void * self, void * _cmd, void * arg2) {
+    rbx = arg2;
+    r15 = self;
+    r14 = [NSStringFromSelector(rbx) retain];
+    if ((r14 != 0x0) && ([r14 isEqualToString:@""] == 0x0)) {
+            [r15 class];
+            rax = _nbs_getClassImpOf();
+            (rax)(r15, @selector(initialize));
+    }
+    rax = class_getName(r15);
+    r13 = [[NSString stringWithUTF8String:rax] retain];
+    rdx = @"_Aspects_";
+    if ([r13 hasSuffix:rdx] == 0x0) goto loc_100050137;
+
+loc_10005011e:
+    if (*(int8_t *)_is_tiaoshi_kai == 0x0) goto loc_100050218;
+
+loc_10005012e:
+    rsi = cfstring__V__A;
+    goto loc_100050195;
+
+loc_100050195:
+    __NBSDebugLog(0x3, rsi, rdx, rcx, r8, r9, stack[2048]);
+    goto loc_100050218;
+
+loc_100050218:
+    [r13 release];
+    rdi = r14;
+    [rdi release];
+    return;
+
+loc_100050137:
+    rdx = @"RACSelectorSignal";
+    if ([r13 hasSuffix:rdx] == 0x0) goto loc_10005016b;
+
+loc_100050152:
+    if (*(int8_t *)_is_tiaoshi_kai == 0x0) goto loc_100050218;
+
+loc_100050162:
+    rsi = cfstring__V__R;
+    goto loc_100050195;
+
+loc_10005016b:
+    if (_classSelf_isImpOf(r15, "nbs_vc_flag") == 0x0) goto loc_1000501a3;
+
+loc_10005017e:
+    if (*(int8_t *)_is_tiaoshi_kai == 0x0) goto loc_100050218;
+
+loc_10005018e:
+    rsi = cfstring____Yh;
+    goto loc_100050195;
+
+loc_1000501a3:
+    rbx = objc_retainBlock(void ^(void * _block, void * arg1) {
+        return;
+    });
+    rax = imp_implementationWithBlock(rbx);
+    class_addMethod(r15, @selector(nbs_vc_flag), rax, "v@:");
+    [rbx release];
+    [_priv_NBSUIAgent hook_viewDidLoad:r15];
+    [_priv_NBSUIAgent hook_viewWillAppear:r15];
+    [_priv_NBSUIAgent hook_viewDidAppear:r15];
+    goto loc_100050218;
+}
+```
+`nbs_jump_initialize` 的代码有点长，但是从 `loc_1000501a3` 的例程可以观察到主要逻辑会执行 `hook_viewDidLoad`、`hook_viewWillAppear` 和 `hook_viewDidAppear` 三个方法，从而 hook 住 `UIViewController` 子类的这三个方法。
+
+先以 `hook_viewDidLoad:` 方法为例讲解，下面这段代码可能有点晦涩难懂，需要认真分析
+
+```
+void +[_priv_NBSUIAgent hook_viewDidLoad:](void * self, void * _cmd, void * arg2) {
+    rax = [_priv_NBSUIHookMatrix class];
+    var_D8 = _nbs_getInstanceImpOf();
+    var_D0 = _nbs_getInstanceImpOf();
+    rbx = class_getName(arg2);
+    r14 = class_getSuperclass(arg2);
+    rax = [NSString stringWithFormat:@"nbs_%s_viewDidLoad", rbx];
+    rax = [rax retain];
+    var_B8 = rax;
+    var_C0 = NSSelectorFromString(rax);
+    r12 = objc_retainBlock(__NSConcreteStackBlock);
+    var_D0 = imp_implementationWithBlock(r12);
+    [r12 release];
+    rbx = objc_retainBlock(__NSConcreteStackBlock);
+    r14 = imp_implementationWithBlock(rbx);
+    [rbx release];
+    _nbs_Swizzle_orReplaceWithIMPs(arg2, @selector(viewDidLoad), var_C0, r14, var_D0);
+    [var_B8 release];
+    return;
+}
+
+```
+
+`hook_viewDidLoad:` 方法中的参数 `arg2` 即是要 hook 的 `ViewController` 的类，
