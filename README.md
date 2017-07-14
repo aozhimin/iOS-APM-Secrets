@@ -1,10 +1,10 @@
 <p align="center">
 
-<img src="Images/banner.jpg" alt="Reveal" title="Reveal"/>
+<img src="Images/banner.jpeg" alt="Reveal" title="Reveal"/>
 
 </p>
 
-# 揭秘 APM iOS SDK 的实现
+# 揭秘 APM iOS SDK 的核心技术
 
 ## 前言
 
