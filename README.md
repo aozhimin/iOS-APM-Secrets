@@ -8,11 +8,13 @@
 
 ## 前言
 
-有关 APM 的技术文章非常多，但大部分文章都只是浅尝辄止，并未对实现细节进行深挖。本文旨在通过剖析 SDK 具体实现细节，揭露知名 APM 厂商的 iOS SDK 背后的秘密。分析的 APM SDK 有**听云**, **OneAPM** 和 **Firebase Performance Monitoring** 等。
+有关 APM 的技术文章非常多，但大部分文章都只是浅尝辄止，并未对实现细节进行深挖。本文旨在通过剖析 SDK 具体实现细节，揭露知名 APM 厂商的 iOS SDK 背后的秘密。分析的 APM SDK 有**听云**, **OneAPM** 和 **Firebase Performance Monitoring** 等。笔者才疏学浅，若有讹误，不客斧正，以求再版，更臻完美。
+
+> 本篇文章中分析的听云 SDK 版本是 2.3.5，与最新版本会存在些许差异，不过我大致翻看了新版的代码，差异不大，不影响分析。
 
 ## 页面渲染时间
 
-页面渲染的监控，比较容易想到的是通过 hook 页面的几个关键的生命周期方法，例如 `viewDidLoad`、`viewDidAppear:` 等，从而计算出页面渲染时间，最终发现慢加载的页面。然而如果真正通过上述思路去着手实现的时候，便会遇到难题。在 APM SDK 中如何才能 hook 应用所有页面的生命周期的方法呢？如果尝试 hook `UIViewController` 的方法又会如何呢？hook `UIViewController` 的方法明显不可行，原因是他只会作用 `UIViewController` 的方法，而应用中大部分的视图控制器都是继承自 `UIViewController` 的，所以这种方法不可行。但是听云 SDK 却能够实现。页面 Hook 的逻辑主要是 `_priv_NBSUIAgent` 类中实现的，下面是 `_priv_NBSUIAgent` 类的定义，其中 `hook_viewDidLoad` 等几个方法便是线索。
+页面渲染的监控，这个需求看似很简单，但是在实际开发的过程中还是会遇到不少问题。比较容易想到的是通过 hook 页面的几个关键的生命周期方法，例如 `viewDidLoad`、`viewDidAppear:` 等，从而计算出页面渲染时间，最终发现慢加载的页面。然而如果真正通过上述思路去着手实现的时候，便会遇到难题。在 APM SDK 中如何才能 hook 应用所有页面的生命周期的方法呢？如果尝试 hook `UIViewController` 的方法又会如何呢？hook `UIViewController` 的方法明显不可行，原因是他只会作用 `UIViewController` 的方法，而应用中大部分的视图控制器都是继承自 `UIViewController` 的，所以这种方法不可行。但是听云 SDK 却能够实现。页面 Hook 的逻辑主要是 `_priv_NBSUIAgent` 类中实现的，下面是 `_priv_NBSUIAgent` 类的定义，其中 `hook_viewDidLoad` 等几个方法便是线索。
 
 ```
                     ; @class _priv_NBSUIAgent : NSObject {
@@ -90,7 +92,86 @@ void +[_priv_NBSUIAgent hookSubOfController](void * self, void * _cmd) {
 
 从 `_subMetaClassNamesInMainBundle_c` 的命名和传入的 "UIViewController" 参数，基本可以推断这个 C 函数是获取 MainBundle 中所有 `UIViewController` 的子类。而事实上，如果通过 LLDB 在这个函数 Call 完之后的那行汇编代码下断点，会发现返回的确实是 `UIViewController` 子类的数组。下面的 `if` 语句判断 `r12` 寄存器不为 `nil` 并且 `r12` 寄存器的 `count` 不等于0才执行 `if` 里面的逻辑，而 `r12` 寄存器存放的正是 `_subMetaClassNamesInMainBundle_c` 函数的返回值，也就是 `UIViewController` 子类的数组。
 
-下面再来重点看看里面的 `do-while` 循环语句，循环判断的语句为 `var_98 + 0x1 < rax`，`var_98` 在循环开始的位置赋值 `rdx` 寄存器，`rdx` 寄存器在循环外初始化为0，所以 `var_98` 就是计数器，而 `rax` 寄存器则是赋值为 `r12` 寄存器的 `count` 方法，依此得出这个 `do-while` 循环实际就是遍历 `UIViewController` 子类的数组。遍历的行为则是通过 `_nbs_Swizzle_orReplaceWithIMPs` 实现 `initialize` 和 `nbs_jump_initialize:` 的方法交换。
+`_subMetaClassNamesInMainBundle_c` 函数代码如下：
+
+```
+void _subMetaClassNamesInMainBundle_c(int arg0) {
+    rbx = objc_getClass(arg0);
+    rdi = 0x0;
+    if (rbx == 0x0) goto loc_10001dbde;
+
+loc_10001db4d:
+    r15 = _classNamesInMainBundle_c(var_2C);
+    var_38 = [NSMutableArray new];
+    if (var_2C == 0x0) goto loc_10001dbd2;
+
+loc_10001db77:
+    r14 = 0x0;
+    goto loc_10001db7a;
+
+loc_10001db7a:
+    r13 = objc_getClass(*(r15 + r14 * 0x8));
+    r12 = r13;
+    if (r13 == 0x0) goto loc_10001dbc9;
+
+loc_10001db8e:
+    rax = class_getSuperclass(r12);
+    if (rax == rbx) goto loc_10001dba5;
+
+loc_10001db9b:
+    COND = rax != r12;
+    r12 = rax;
+    if (COND) goto loc_10001db8e;
+
+loc_10001dbc9:
+    r14 = r14 + 0x1;
+    if (r14 < var_2C) goto loc_10001db7a;
+
+loc_10001dbd2:
+    free(r15);
+    rdi = var_38;
+    goto loc_10001dbde;
+
+loc_10001dbde:
+    [rdi autorelease];
+    return;
+
+loc_10001dba5:
+    rax = class_getName(r13);
+    rax = objc_getMetaClass(rax);
+    [var_38 addObject:rax];
+    goto loc_10001dbc9;
+}
+```
+
+`_subMetaClassNamesInMainBundle_c` 函数中的 `loc_10001db4d` 子例程调用了 `_classNamesInMainBundle_c` 函数，该函数代码如下：
+
+```
+int _classNamesInMainBundle_c(int arg0) {
+    rbx = [[NSBundle mainBundle] retain];
+    r15 = [[rbx executablePath] retain];
+    [rbx release];
+    rbx = objc_retainAutorelease(r15);
+    r14 = objc_copyClassNamesForImage([rbx UTF8String], arg0);
+    [rbx release];
+    rax = r14;
+    return rax;
+}
+```
+
+`_classNamesInMainBundle_c` 函数的实现显而易见，无非就是调用 `objc_copyClassNamesForImage` 以获取 `mainBundle` 可执行路径的所有类的名称，集合的数量赋给了 `outCount` 变量，调用方可以使用 `outCount` 来对其遍历。
+
+``` objective-c
+static inline char **WDTClassNamesInMainBundle(unsigned int *outCount) {
+    NSString *executablePath = [[NSBundle mainBundle] executablePath];
+    char **classNames = objc_copyClassNamesForImage([executablePath UTF8String], outCount);
+    return classNames;
+}
+```
+
+如果不在乎细节，那么 `_subMetaClassNamesInMainBundle_c` 函数的实现也很清晰，就是遍历 `objc_copyClassNamesForImage` 函数的返回值，如果 item 是 `UIViewController` 的子类，则取得该类的 `metaClass` 并添加到可变数组 `var_38` 中。
+
+接下来再来重点看看里面的 `do-while` 循环语句，循环判断的语句为 `var_98 + 0x1 < rax`，`var_98` 在循环开始的位置赋值 `rdx` 寄存器，`rdx` 寄存器在循环外初始化为0，所以 `var_98` 就是计数器，而 `rax` 寄存器则是赋值为 `r12` 寄存器的 `count` 方法，依此得出这个 `do-while` 循环实际就是遍历 `UIViewController` 子类的数组。遍历的行为则是通过 `_nbs_Swizzle_orReplaceWithIMPs` 实现 `initialize` 和 `nbs_jump_initialize:` 的方法交换。
 
 `nbs_jump_initialize` 的代码如下：
 
