@@ -576,7 +576,7 @@ The notification object is the window object that has become visible. This notif
 Switching between apps does not generate visibility-related notifications for windows. Window visibility changes reflect changes to the window’s hidden property and reflect only the window’s visibility within the app.
 
 
-下面是通知的处理方法，方法的最后会注销 `UIWindowDidBecomeVisibleNotification` 通知，因为该通知会调用多次，而我们只需要他执行一次。首先调用 `-startAppActivityTracking` 方法开始追踪 APP 的活动，这个方法稍后会深入讨论，
+下面是通知的处理方法，我将方法还原成 Objective-C 的伪代码，可以对比反编译的伪代码
 
 ```
 void +[FPRAppActivityTracker windowDidBecomeVisible:](void * self, void * _cmd, void * arg2) {
@@ -616,6 +616,27 @@ void +[FPRAppActivityTracker windowDidBecomeVisible:](void * self, void * _cmd, 
     return;
 }
 ```
+
+```
++ (void)windowDidBecomeVisible:(NSNotification *)notification {
+    FPRAppActivityTracker *tracker = [self sharedInstance];
+    [tracker startAppActivityTracking];
+    FIRTrace *trace = [[FIRTrace alloc] initInternalTraceWithName:@"_as"];
+    [tracker setAppStartTrace: trace];
+    [[tracker appStartTrace] startWithStartTime:_appStartTime];
+    [[tracker appStartTrace] startStageNamed:@"_astui" startTime:_appStartTime];
+    
+    if (_windowDidBecomeVisible:.FDDStageStarted) {
+        [[tracker appStartTrace] startStageNamed:@"_astfd" startTime:_appStartTime];
+        _windowDidBecomeVisible:.FDDStageStarted = 1;
+    }
+    
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:UIWindowDidBecomeVisibleNotification object:nil];
+}
+
+```
+
+方法的最后会注销 `UIWindowDidBecomeVisibleNotification` 通知，因为该通知会调用多次，而我们只需要他执行一次。首先调用 `-startAppActivityTracking` 方法开始追踪 APP 的活动，这个方法稍后会深入讨论。
 
 ## 致谢
 
