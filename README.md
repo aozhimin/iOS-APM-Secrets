@@ -10,6 +10,7 @@
 
 * [前言](#前言)
 * [页面渲染时间](#页面渲染时间)
+* [启动时间](#启动时间)
 
 ## 前言
 
@@ -361,3 +362,184 @@ int ___37+[_priv_NBSUIAgent hook_viewDidLoad:]_block_invoke(int arg0, int arg1) 
 ```
 
 `r8` 寄存器是 `nbs_jump_viewDidLoad:superClass:` 的 IMP，这段代码只是调用这个 IMP。IMP 函数的参数与 `nbs_jump_viewDidLoad:superClass:` 相同。
+
+```
+void -[_priv_NBSUIHookMatrix nbs_jump_viewDidLoad:superClass:](void * self, void * _cmd, void * * arg2, void * arg3) {
+    rbx = arg3;
+    var_70 = arg2;
+    var_68 = _cmd;
+    r14 = self;
+    rax = [self class];
+    rax = class_getSuperclass(rax);
+    if ((rbx != 0x0) && (rax != rbx)) {
+            rax = var_70;
+            if (rax != 0x0) {
+                    rdi = r14;
+                    (rax)(rdi, @selector(viewDidLoad));
+            }
+            else {
+                    NSLog(@"");
+                    [[r14 super] viewDidLoad];
+            }
+    }
+    else {
+            var_B8 = rbx;
+            objc_storeWeak(_currentViewController, 0x0);
+            r14 = 0x0;
+            [[NSString stringWithFormat:@"%d#loading", 0x0] retain];
+            r12 = 0x0;
+            if (0x0 != 0x0) {
+                    rcx = class_getName([r12 class]);
+                    r14 = [[NSString stringWithFormat:@"MobileView/Controller/%s#%@", rcx, @"loading"] retain];
+            }
+            var_A0 = r14;
+            r14 = [[_priv_NBSUILogCenter_assistant alloc] initWithControllerName:r14];
+            var_80 = r14;
+            var_60 = _objc_release;
+            [r14 setTheVC:_objc_release];
+            [r14 setVC_Address:_objc_release];
+            [r14 setIsOther:0x0];
+            [*_controllerStack push:r14];
+            rbx = [_glb_all_activing_VCS() retain];
+            var_98 = _objc_msgSend;
+            [rbx setObject:r14 forKey:_objc_msgSend];
+            [rbx release];
+            r12 = [[NSDate date] retain];
+            [r12 timeIntervalSince1970];
+            xmm0 = intrinsic_mulsd(xmm0, *0x100066938);
+            rbx = intrinsic_cvttsd2si(rbx, xmm0);
+            [r12 release];
+            [r14 setStartTime:rbx];
+            rcx = class_getName([var_60 class]);
+            r13 = [[NSString stringWithFormat:@"%s", rcx] retain];
+            r14 = [NSStringFromSelector(var_68) retain];
+            var_88 = [_nbs_embedIn_start() retain];
+            [r14 release];
+            [r13 release];
+            rbx = [[NBSLensInterfaceEventLogger shareObject] retain];
+            var_78 = rbx;
+            rax = [NBSLensUITraceSegment new];
+            var_58 = rax;
+            rbx = [[rbx theStack] retain];
+            [rbx push:rax];
+            [rbx release];
+            rcx = class_getName([var_60 class]);
+            r13 = [[NSString stringWithFormat:@"%s", rcx] retain];
+            r12 = [NSStringFromSelector(var_68) retain];
+            r14 = [[NSString stringWithFormat:@"%@#%@", r13, r12] retain];
+            var_A8 = r14;
+            [r12 release];
+            rdi = r13;
+            [rdi release];
+            [var_58 setSegmentName:r14];
+            rax = [NSDictionary dictionary];
+            rax = [rax retain];
+            var_B0 = rax;
+            [var_58 setSegmentParam:rax];
+            rbx = [[NSThread currentThread] retain];
+            rdx = rbx;
+            [var_58 setThreadInfomation:rdx];
+            [rbx release];
+            rbx = [[NSDate date] retain];
+            [rbx timeIntervalSince1970];
+            xmm0 = intrinsic_mulsd(xmm0, *0x100066938);
+            var_68 = intrinsic_movsd(var_68, xmm0);
+            [rbx release];
+            xmm0 = intrinsic_movsd(xmm0, var_68);
+            [var_58 setStartTime:rdx];
+            [var_58 setEntryTime:0x0];
+            r14 = [NBSLensUITraceSegment new];
+            var_90 = r14;
+            xmm0 = intrinsic_movsd(xmm0, var_68);
+            [r14 setStartTime:0x0];
+            rcx = class_getName([var_60 class]);
+            r15 = [[NSString stringWithFormat:@"%s", rcx] retain];
+            rbx = [[NSString stringWithFormat:@"%@#viewLoading", r15] retain];
+            [r14 setSegmentName:rbx];
+            [rbx release];
+            [r15 release];
+            rcx = var_30;
+            rax = [NSDictionary dictionaryWithObjects:rbx forKeys:rcx count:0x0];
+            [r14 setSegmentParam:rax];
+            rbx = [[NSThread currentThread] retain];
+            [r14 setThreadInfomation:rbx];
+            [rbx release];
+            [r14 setEntryTime:0x0];
+            rax = var_70;
+            if (rax != 0x0) {
+                    (rax)(var_60, @selector(viewDidLoad), 0x0, rcx, 0x0);
+            }
+            else {
+                    NSLog(@"");
+                    [[var_60 super] viewDidLoad];
+            }
+            _nbs_embedIn_finish();
+            rdx = [var_88 mach_tm2];
+            [var_80 setFinishTime:rdx];
+            rbx = [[NSDate date] retain];
+            [rbx timeIntervalSince1970];
+            xmm0 = intrinsic_mulsd(xmm0, *0x100066938);
+            var_70 = intrinsic_movsd(var_70, xmm0);
+            [rbx release];
+            xmm0 = intrinsic_movsd(xmm0, var_70);
+            xmm0 = intrinsic_subsd(xmm0, var_68);
+            rdx = intrinsic_cvttsd2si(rdx, xmm0);
+            [var_58 setExitTime:rdx];
+            rbx = [[var_78 theStack] retain];
+            rax = [rbx pop];
+            rax = [rax retain];
+            [rax release];
+            [rbx release];
+            rbx = [[var_78 theStack] retain];
+            r15 = [rbx isEmpty];
+            [rbx release];
+            if (r15 == 0x0) {
+                    rbx = [[var_78 theStack] retain];
+                    r14 = [[rbx peer] retain];
+                    [rbx release];
+                    [r14 startTime];
+                    xmm1 = intrinsic_movsd(xmm1, var_68);
+                    xmm1 = intrinsic_subsd(xmm1, xmm0);
+                    rdx = intrinsic_cvttsd2si(rdx, xmm1);
+                    [var_58 setEntryTime:rdx];
+                    [r14 startTime];
+                    rdx = intrinsic_cvttsd2si(rdx, intrinsic_subsd(intrinsic_movsd(xmm1, var_70), xmm0));
+                    [var_58 setExitTime:rdx];
+                    rbx = [[r14 childSegments] retain];
+                    rdx = var_58;
+                    [rbx addObject:rdx];
+                    [rbx release];
+                    [r14 release];
+            }
+            rbx = [[var_90 childSegments] retain];
+            [rbx addObject:var_58];
+            [rbx release];
+            objc_setAssociatedObject(var_60, @"viewLoading", var_90, 0x1);
+            rax = [*_controllerStack pop];
+            rax = [rax retain];
+            [rax release];
+            rbx = [[_priv_NBSLENS_VCSBuffer sharedObj] retain];
+            [rbx addObj:var_80];
+            [rbx release];
+            rbx = [_glb_all_activing_VCS() retain];
+            [rbx removeObjectForKey:var_98];
+            [rbx release];
+            [var_90 release];
+            [var_B0 release];
+            [var_A8 release];
+            [var_58 release];
+            [var_78 release];
+            [var_88 release];
+            [var_80 release];
+            [var_A0 release];
+            [var_98 release];
+    }
+    return;
+}
+```
+
+## 启动时间
+
+## 致谢
+
+* [林柏参](https://github.com/BaiCan)
