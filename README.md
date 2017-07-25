@@ -540,6 +540,27 @@ void -[_priv_NBSUIHookMatrix nbs_jump_viewDidLoad:superClass:](void * self, void
 
 ## 启动时间
 
+启动时间以 **Firebase Performance Monitoring** SDK 为例进行讲解，下文以 FPM SDK 作为简称方便讲述，FPM SDK 实现的是冷启动时间的统计，主要逻辑在 `FPRAppActivityTracker` 类中实现。
+
+首先看类的 `+load` 方法，反编译代码如下：
+
+```
+void +[FPRAppActivityTracker load](void * self, void * _cmd) {
+    rax = [NSDate date];
+    rax = [rax retain];
+    rdi = *_appStartTime;
+    *_appStartTime = rax;
+    [rdi release];
+    rbx = [[NSNotificationCenter defaultCenter] retain];
+    [rbx addObserver:self selector:@selector(windowDidBecomeVisible:) name:*_UIWindowDidBecomeVisibleNotification object:0x0];
+    rdi = rbx;
+    [rdi release];
+    return;
+}	
+```
+
+显而易见，`_appStartTime` 是一个 static 的 `NSDate` 实例，用来保存整个应用启动的开始时间，所以 FPM SDK 是在 `FPRAppActivityTracker` 的 `+load` 标记应用启动的开始时间。了解 `+load` 方法的读者应该知道该方法是在 `main` 函数调用之前的钩子方法，准确的时间是当镜像加载到运行时、对 `+load` 方法的准备就绪之后，开始调用 `+load` 方法。此外不同类的 `+load` 方法还与 `Build Phases->Compile Sources` 的文件顺序有关，我们姑且认为这些对启动时间的统计没有显著的影响。
+
 ## 致谢
 
 * [林柏参](https://github.com/BaiCan)
