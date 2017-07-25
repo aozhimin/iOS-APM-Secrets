@@ -561,6 +561,20 @@ void +[FPRAppActivityTracker load](void * self, void * _cmd) {
 
 显而易见，`_appStartTime` 是一个 static 的 `NSDate` 实例，用来保存整个应用启动的开始时间，所以 FPM SDK 是在 `FPRAppActivityTracker` 的 `+load` 标记应用启动的开始时间。了解 `+load` 方法的读者应该知道该方法是在 `main` 函数调用之前的钩子方法，准确的时间是当镜像加载到运行时、对 `+load` 方法的准备就绪之后，开始调用 `+load` 方法。此外不同类的 `+load` 方法还与 `Build Phases->Compile Sources` 的文件顺序有关，我们姑且认为这些对启动时间的统计没有显著的影响。
 
+之后注册了 `UIWindowDidBecomeVisibleNotification` 的通知，这个通知是当 `UIWindow` 对象激活时并展示在界面的时候触发的。读者可以注册这个通知，然后用 LLDB 打印 notification 对象，示例如下:
+
+```
+NSConcreteNotification 0x7fc94a716f50 {name = UIWindowDidBecomeVisibleNotification; object = <UIStatusBarWindow: 0x7fc94a5092a0; frame = (0 0; 320 568); opaque = NO; gestureRecognizers = <NSArray: 0x7fc94a619f30>; layer = <UIWindowLayer: 0x7fc94a513f50>>}
+```
+
+第一次收到 `UIWindowDidBecomeVisibleNotification` 通知的时间早于 `- application:didFinishLaunchingWithOptions:` 回调，这个通知时状态栏的 `window` 创建时触发的。这个实现感觉有点取巧，不能确保未来 Apple 会不会调整调用的时序。
+
+下面是 `UIWindowDidBecomeVisibleNotification` 的官方说明。
+
+> Posted when an UIWindow object becomes visible.
+The notification object is the window object that has become visible. This notification does not contain a userInfo dictionary.
+Switching between apps does not generate visibility-related notifications for windows. Window visibility changes reflect changes to the window’s hidden property and reflect only the window’s visibility within the app.
+
 ## 致谢
 
 * [林柏参](https://github.com/BaiCan)
