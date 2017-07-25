@@ -567,13 +567,55 @@ void +[FPRAppActivityTracker load](void * self, void * _cmd) {
 NSConcreteNotification 0x7fc94a716f50 {name = UIWindowDidBecomeVisibleNotification; object = <UIStatusBarWindow: 0x7fc94a5092a0; frame = (0 0; 320 568); opaque = NO; gestureRecognizers = <NSArray: 0x7fc94a619f30>; layer = <UIWindowLayer: 0x7fc94a513f50>>}
 ```
 
-第一次收到 `UIWindowDidBecomeVisibleNotification` 通知的时间早于 `- application:didFinishLaunchingWithOptions:` 回调，这个通知时状态栏的 `window` 创建时触发的。这个实现感觉有点取巧，不能确保未来 Apple 会不会调整调用的时序。
+第一次收到 `UIWindowDidBecomeVisibleNotification` 通知的时间早于 `- application:didFinishLaunchingWithOptions:` 回调，这个通知时状态栏的 `window` 创建时触发的，这个实现感觉有点取巧，不能确保未来 Apple 会不会调整调用的时序。
 
 下面是 `UIWindowDidBecomeVisibleNotification` 的官方说明。
 
 > Posted when an UIWindow object becomes visible.
 The notification object is the window object that has become visible. This notification does not contain a userInfo dictionary.
 Switching between apps does not generate visibility-related notifications for windows. Window visibility changes reflect changes to the window’s hidden property and reflect only the window’s visibility within the app.
+
+
+下面是通知的处理方法，方法的最后会注销 `UIWindowDidBecomeVisibleNotification` 通知，因为该通知会调用多次，而我们只需要他执行一次。首先调用 `-startAppActivityTracking` 方法开始追踪 APP 的活动，这个方法稍后会深入讨论，
+
+```
+void +[FPRAppActivityTracker windowDidBecomeVisible:](void * self, void * _cmd, void * arg2) {
+    var_30 = self;
+    r13 = _objc_msgSend;
+    r12 = [[self sharedInstance] retain];
+    [r12 startAppActivityTracking];
+    rbx = [[FIRTrace alloc] initInternalTraceWithName:@"_as"];
+    [r12 setAppStartTrace:rbx];
+    [rbx release];
+    r15 = @selector(appStartTrace);
+    rbx = [_objc_msgSend(r12, r15) retain];
+    [rbx startWithStartTime:*_appStartTime];
+    [rbx release];
+    rbx = [_objc_msgSend(r12, r15) retain];
+    rcx = *_appStartTime;
+    rdx = @"_astui";
+    [rbx startStageNamed:rdx startTime:rcx];
+    [rbx release];
+    rax = *(int8_t *)_windowDidBecomeVisible:.FDDStageStarted;
+    rax = rax & 0x1;
+    COND = rax != 0x0;
+    if (!COND) {
+            r13 = _objc_msgSend;
+            rcx = *_appStartTime;
+            rbx = [_objc_msgSend(r12, r15, rdx, rcx) retain];
+            rdx = @"_astfd";
+            [rbx startStageNamed:rdx, rcx];
+            [rbx release];
+            *(int8_t *)_windowDidBecomeVisible:.FDDStageStarted = 0x1;
+    }
+    rbx = [(r13)(@class(NSNotificationCenter), @selector(defaultCenter), rdx, *_UIWindowDidBecomeVisibleNotification) retain];
+    (r13)(rbx, @selector(removeObserver:name:object:), var_30, *_UIWindowDidBecomeVisibleNotification, 0x0);
+    [rbx release];
+    rdi = r12;
+    [rdi release];
+    return;
+}
+```
 
 ## 致谢
 
