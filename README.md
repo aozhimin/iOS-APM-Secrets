@@ -11,6 +11,7 @@
 * [前言](#前言)
 * [页面渲染时间](#页面渲染时间)
 * [启动时间](#启动时间)
+* [网络](#网络)
 
 ## 前言
 
@@ -637,6 +638,56 @@ void +[FPRAppActivityTracker windowDidBecomeVisible:](void * self, void * _cmd, 
 ```
 
 方法的最后会注销 `UIWindowDidBecomeVisibleNotification` 通知，因为该通知会调用多次，而我们只需要他执行一次。首先调用 `-startAppActivityTracking` 方法开始追踪 APP 的活动，这个方法稍后会深入讨论。
+
+## 网络
+
+首先明确一点，我们这里讨论的网络请求没有特殊说明指的都是 HTTP 请求。听云 SDK 实现网络监控主要使用了两种方式：第一种是通过 hook iOS 网络编程使用的 API，这种方式主要针对的是原生的网络请求；第二种是继承 `NSURLProtocol` 来实现网络请求的拦截，这种方式主要针对的是 UIWebView 中的网络请求。
+
+
+### NSURLSession
+
+SDK hook 了所有网络请求中构造 `NSURLSessionDataTask`, `NSURLSessionUploadTask` 和 `NSURLSessionDownloadTask` 的 API。 hook 的逻辑在 C 函数 `_nbs_hook_NSURLSession` 中，伪代码如下：
+
+```
+int _nbs_hook_NSURLSession() {
+    _nbs_hook_NSURLSessionTask();
+    r13 = [[_priv_NSURLSession_NBS class] retain];
+    r14 = [objc_getClass("NSURLSession") retain];
+    r15 = [objc_getMetaClass(class_getName(r13)) retain];
+    r12 = [objc_getMetaClass("NSURLSession") retain];
+    if ((((((_nbs_hookClass_CopyAMethod() != 0x0) && (_nbs_hookClass_CopyAMethod() != 0x0)) && (_nbs_hookClass_CopyAMethod() != 0x0)) && (_nbs_hookClass_CopyAMethod() != 0x0)) && (_nbs_hookClass_CopyAMethod() != 0x0)) && (_nbs_hookClass_CopyAMethod() != 0x0)) {
+            if (_nbs_hookClass_CopyAMethod() != 0x0) {
+                    if (_nbs_hookClass_CopyAMethod() != 0x0) {
+                            if (_nbs_hookClass_CopyAMethod() != 0x0) {
+                                    if (_nbs_hookClass_CopyAMethod() != 0x0) {
+                                            _nbs_Swizzle(r14, @selector(dataTaskWithRequest:completionHandler:), @selector(nbs_dataTaskWithRequest:completionHandler:));
+                                            _nbs_Swizzle(r14, @selector(downloadTaskWithRequest:completionHandler:), @selector(nbs_downloadTaskWithRequest:completionHandler:));
+                                            _nbs_Swizzle(r14, @selector(downloadTaskWithResumeData:completionHandler:), @selector(nbs_downloadTaskWithResumeData:completionHandler:));
+                                            _nbs_Swizzle(r14, @selector(uploadTaskWithRequest:fromData:completionHandler:), @selector(nbs_uploadTaskWithRequest:fromData:completionHandler:));
+                                            _nbs_Swizzle(r14, @selector(uploadTaskWithRequest:fromFile:completionHandler:), @selector(nbs_uploadTaskWithRequest:fromFile:completionHandler:));
+                                            _nbs_Swizzle(r14, @selector(downloadTaskWithRequest:), @selector(nbs_downloadTaskWithRequest:));
+                                            _nbs_Swizzle(r14, @selector(uploadTaskWithRequest:fromFile:), @selector(nbs_uploadTaskWithRequest:fromFile:));
+                                            _nbs_Swizzle(r14, @selector(uploadTaskWithRequest:fromData:), @selector(nbs_uploadTaskWithRequest:fromData:));
+                                            _nbs_Swizzle(r12, @selector(sessionWithConfiguration:delegate:delegateQueue:), @selector(nbs_sessionWithConfiguration:delegate:delegateQueue:));
+                                            _nbs_Swizzle(r14, @selector(uploadTaskWithStreamedRequest:), @selector(nbs_uploadTaskWithStreamedRequest:));
+                                    }
+                            }
+                    }
+            }
+    }
+    [r12 release];
+    [r15 release];
+    [r14 release];
+    rdi = r13;
+    rax = [rdi release];
+    return rax;
+}
+```
+
+> \_nbs_Swizzle 就是听云实现 Method Swizzling 的 C 函数。
+
+从代码中可以看到除了对上面提到的 `NSURLSessionDataTask`, `NSURLSessionUploadTask` 和 `NSURLSessionDownloadTask` 的 API 使用了 `_nbs_Swizzle`，还替换了 `sessionWithConfiguration:delegate:delegateQueue:` 方法的实现，稍后会讲解为什么要 hook 这个方法。
+
 
 ## 致谢
 
