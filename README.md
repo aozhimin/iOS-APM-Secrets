@@ -720,6 +720,165 @@ typedef void (^nbs_URLSessionDataTaskCompletionHandler)(NSData * _Nullable data,
 }
 ```
 
+`_priv_NBSHTTPTransaction` 是 SDK 中和 HTTP 请求相关的性能参数的 Model。该类结构如下：
+
+```
+@class _priv_NBSHTTPTransaction : NSObject {
+    @property isFileURL
+    @property tm_dur_dns
+    @property tm_dur_cnnct
+    @property tm_pnt_send
+    @property tm_dur_firstP
+    @property tm_dur_end
+    @property tm_dur_ssl
+    @property sendSize
+    @property receiveSize
+    @property headerSize
+    @property dataSize
+    @property statusCode
+    @property errCode
+    @property contentLength
+    @property errText
+    @property url
+    @property ip
+    @property contentType
+    @property anyObj
+    @property useContentLength
+    @property netType
+    @property appData
+    @property request
+    @property response
+    @property responseData
+    @property urlParams
+    @property dataBody
+    @property httpMethodNumber
+    @property libClassId
+    @property socketItem
+    @property threadId
+    @property cdn_associate
+    @property connectType
+    @property cdnVendorName
+    @property cdn_flg
+    ivar tm_dur_cnnct
+    ivar tm_dur_dns
+    ivar tm_dur_firstP
+    ivar tm_dur_end
+    ivar tm_dur_ssl
+    ivar tm_pnt_send
+    ivar sendSize
+    ivar receiveSize
+    ivar headerSize
+    ivar dataSize
+    ivar statusCode
+    ivar errCode
+    ivar errText
+    ivar url
+    ivar ip
+    ivar contentType
+    ivar contentLength
+    ivar anyObj
+    ivar useContentLength
+    ivar netType
+    ivar appData
+    ivar response
+    ivar responseData
+    ivar urlParams
+    ivar dataBody
+    ivar httpMethodNumber
+    ivar libClassId
+    ivar socketItem
+    ivar threadId
+    ivar cdn_associate
+    ivar cdn_flg
+    ivar isFileURL
+    ivar connectType
+    ivar cdnVendorName
+    ivar _request
+    -clear
+    -init
+    -getText
+    -addIntoArray:
+    -startWithIP:DNSTime:atTimePoint:withObject:
+    -updateWithResponse:timePoint:
+    -updateWithReceiveData:
+    -updateWithTotalReceiveData:
+    -updateWithTotalReceiveSize:
+    -updateSendSize:
+    -updateWithError:
+    -finishAt:
+    -.cxx_destruct
+    -tm_dur_dns
+    -setTm_dur_dns:
+    -tm_pnt_send
+    -setTm_pnt_send:
+    -tm_dur_firstP
+    -setTm_dur_firstP:
+    -tm_dur_end
+    -setTm_dur_end:
+    -tm_dur_cnnct
+    -setTm_dur_cnnct:
+    -tm_dur_ssl
+    -setTm_dur_ssl:
+    -sendSize
+    -setSendSize:
+    -receiveSize
+    -setReceiveSize:
+    -errCode
+    -setErrCode:
+    -contentLength
+    -setContentLength:
+    -statusCode
+    -setStatusCode:
+    -headerSize
+    -setHeaderSize:
+    -dataSize
+    -setDataSize:
+    -url
+    -setUrl:
+    -ip
+    -setIp:
+    -errText
+    -setErrText:
+    -contentType
+    -setContentType:
+    -useContentLength
+    -setUseContentLength:
+    -netType
+    -setNetType:
+    -appData
+    -setAppData:
+    -response
+    -setResponse:
+    -responseData
+    -setResponseData:
+    -anyObj
+    -setAnyObj:
+    -urlParams
+    -setUrlParams:
+    -dataBody
+    -setDataBody:
+    -httpMethodNumber
+    -setHttpMethodNumber:
+    -libClassId
+    -setLibClassId:
+    -isFileURL
+    -setIsFileURL:
+    -socketItem
+    -setSocketItem:
+    -threadId
+    -setThreadId:
+    -connectType
+    -setConnectType:
+    -cdnVendorName
+    -setCdnVendorName:
+    -cdn_associate
+    -setCdn_associate:
+    -cdn_flg
+    -setCdn_flg:
+    -request
+    -setRequest:
+}
+```
 
 
 ## 致谢
