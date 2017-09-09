@@ -688,6 +688,39 @@ int _nbs_hook_NSURLSession() {
 
 从代码中可以看到除了对上面提到的 `NSURLSessionDataTask`, `NSURLSessionUploadTask` 和 `NSURLSessionDownloadTask` 的 API 使用了 `_nbs_Swizzle`，还替换了 `sessionWithConfiguration:delegate:delegateQueue:` 方法的实现，稍后会讲解为什么要 hook 这个方法。
 
+所有 hook 的方法实现被定义在 `_priv_NSURLSession_NBS` 类中。
+
+`nbs_dataTaskWithRequest:completionHandler:` 的核心代码如下：
+
+```
+typedef void (^nbs_URLSessionDataTaskCompletionHandler)(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error);
+
+- (NSURLSessionDataTask *)nbs_dataTaskWithRequest:(NSURLRequest *)request
+                                completionHandler:(void (^)(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error))completionHandler {
+    _priv_NBSHTTPTransaction *httpTransaction = [_priv_NBSHTTPTransaction new];
+    
+    nbs_URLSessionDataTaskCompletionHandler wrappedCompletionHandler;
+    __block NSURLSessionDataTask *dataTask;
+    
+    if (completionHandler) {
+        wrappedCompletionHandler = ^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+            NSTimeInterval timeInterval = [[NSDate date] timeIntervalSince1970];
+            [dataTask.httpTransaction finishAt:timeInterval];
+            completionHandler(data, response, error);
+        };
+    }
+    
+    dataTask = [self nbs_dataTaskWithRequest:request
+                           completionHandler:wrappedCompletionHandler];
+    
+    if (dataTask) {
+        dataTask.httpTransaction = httpTransaction;
+    }
+    return dataTask;
+}
+```
+
+
 
 ## 致谢
 
