@@ -880,6 +880,16 @@ typedef void (^nbs_URLSessionDataTaskCompletionHandler)(NSData * _Nullable data,
 }
 ```
 
+下表列出了一些关键属性的含义：
+
+|属性|含义|
+|:---:|:----:|
+|tm\_dur_dns|DNS 解析时间
+|tm\_dur_cnnct|TCP 建立连接时间
+|tm\_dur_firstP|首包时间
+|tm\_dur_ssl|SSL 握手时间
+|statusCode|HTTP 状态码
+
 
 ## 致谢
 
