@@ -890,6 +890,30 @@ typedef void (^nbs_URLSessionDataTaskCompletionHandler)(NSData * _Nullable data,
 |tm\_dur_ssl|SSL 握手时间
 |statusCode|HTTP 状态码
 
+### 响应时间
+
+响应时间是一个很好的量化指标，可以用来衡量用户请求服务的等待时间，一般将其定义为用户发送请求开始，到服务端的响应内容到达客户端的这段时间。
+
+下图是 HTTP 请求详解图
+
+<p align="center">
+
+<img src="Images/http_request_process.jpg">
+
+</p>
+
+从上图可以观察到响应时间包括 DNS 域名解析时间，与服务器端建立连接时间，服务器处理时间和响应到达客户端的时间。
+
+如果使用 Charles 拦截 HTTP 请求，可以在 OverView Tab 的 Timing 栏看响应时间的数据，如下图中的 `Duration` 表示就是该请求总的响应时间，其中还包含上文提及的 `DNS`（DNS 域名解析时间）、`Connect`（建立连接时间）和 `SSL Handshake`（SSL 握手时间），因为这个请求是 HTTP 请求，所以 `SSL Handshake` 这个字段留空。
+
+<p align="center">
+
+<img src="Images/charles_response_time.jpg">
+
+</p>
+
+事实上当开发完 SDK 中响应时间的 feature 后，可以通过这种方式来验收结果的正确性，当然 SDK 中获取的时间与 Charles 不可能完全相等，因为两种的实现方式完全不同，但是他们之间差值应该在一个合理的范围内。下文会详细探讨这方面。
+
 
 ## 致谢
 
