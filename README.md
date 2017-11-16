@@ -912,8 +912,184 @@ typedef void (^nbs_URLSessionDataTaskCompletionHandler)(NSData * _Nullable data,
 
 </p>
 
-事实上当开发完 SDK 中响应时间的 feature 后，可以通过这种方式来验收结果的正确性，当然 SDK 中获取的时间与 Charles 不可能完全相等，因为两种的实现方式完全不同，但是他们之间差值应该在一个合理的范围内。下文会详细探讨这方面。
+事实上当开发完 SDK 中响应时间的 feature 后，我们也可以通过这种方式来验收结果的正确性，当然 SDK 中获取的时间与 Charles 不可能完全相等，因为两种的实现方式完全不同，但是他们之间差值应该在一个合理的范围内。下文会详细探讨这方面。
 
+通过上文的介绍我们很容易想到的一个思路：通过 hook 请求发出时的函数，记录下请求的时间，再 hook iOS SDK 中响应的回调，记录下结束的时间，计算差值即可得到这次请求的响应时间。听云的大致思路也是如此，只不过其中还有许多细节需要注意，我们接下来详细讨论它的具体实现方案。
+
+```
+void _nbs_hook_NSURLSessionTask() {
+    r14 = _objc_msgSend;
+    rax = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    rax = [rax retain];
+    var_40 = rax;
+    rax = [NSURLSession sessionWithConfiguration:rax];
+    rax = [rax retain];
+    rdx = 0x0;
+    var_38 = rax;
+    rax = [rax dataTaskWithURL:rdx];
+    rax = [rax retain];
+    var_30 = rax;
+    rbx = [rax class];
+    r12 = @selector(resume);
+    if (class_getInstanceMethod(rbx, r12) != 0x0) {
+            r15 = @selector(superclass);
+            r13 = @selector(resume);
+            var_48 = r15;
+            do {
+                    if (_nbs_slow_isClassItSelfHasMethod(rbx, r12) != 0x0) {
+                            r15 = class_getInstanceMethod(rbx, r12);
+                            rax = method_getImplementation(r15);
+                            rax = objc_retainBlock(__NSConcreteStackBlock);
+                            var_50 = imp_implementationWithBlock(rax);
+                            r13 = r13;
+                            [rax release];
+                            rdi = r15;
+                            r15 = var_48;
+                            rax = method_getTypeEncoding(rdi);
+                            rdx = var_50;
+                            rcx = rax;
+                            class_replaceMethod(rbx, r12, rdx, rcx);
+                    }
+                    r14 = _objc_msgSend;
+                    rbx = _objc_msgSend(rbx, r15, rdx, rcx);
+                    rax = class_getInstanceMethod(rbx, r13);
+                    r12 = r13;
+            } while (rax != 0x0);
+    }
+    (r14)(var_30, @selector(cancel), rdx);
+    (r14)(var_38, @selector(finishTasksAndInvalidate), rdx);
+    [var_30 release];
+    [var_38 release];
+    [var_40 release];
+    return;
+}
+```
+
+将上面伪代码还原为 Objective-C 代码如下：
+
+```
+void _nbs_hook_NSURLSessionTask() {
+    NSURLSessionConfiguration *config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:config];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnonnull"
+    NSURLSessionDataTask *task = [session dataTaskWithURL:nil];
+#pragma clang diagnostic pop
+    Class cls = task.class;
+    if (class_getInstanceMethod(cls, @selector(resume))) {
+        Method method;
+        do {
+            if (_nbs_slow_isClassItSelfHasMethod(cls, @selector(resume))) {
+                Method resumeMethod = class_getInstanceMethod(cls, @selector(resume));
+                IMP imp = imp_implementationWithBlock(^(id self) {
+                });
+                class_replaceMethod(cls, @selector(resume), imp, method_getTypeEncoding(resumeMethod));
+            }
+            
+            cls = [cls superclass];
+            method = class_getInstanceMethod(cls, @selector(resume));
+        } while (method);
+        
+    }
+    [task cancel];
+    [session finishTasksAndInvalidate];
+}
+```
+
+我们知道在 `Foundation` 框架中有些类其实是类族（Class Cluster），比如 `NSDictionary` 和 `NSArray`。而 `NSURLSessionTask` 也是一个类族，在不同的系统版本中继承链不同，所以显然不能直接 hook `NSURLSessionTask` 类，这里采用了一个巧妙的方法，通过 `ephemeralSessionConfiguration` 方法构建一个 Ephemeral sessions（短暂的会话），它与默认会话类似，不过不会将任何数据存储到磁盘中，所有缓存，cookie 和凭据等都保存在 RAM 中并与会话相关联。这样一来当会话无效时，它们将自动清除。然后通过这个短暂会话创建了一个 session 对象，最后构建出 task 对象，并通过这个 task 对象获得真正的类。
+
+上面这种巧妙的做法其实并非听云独创，他其实是参考了 [AFNetworking](https://github.com/AFNetworking/AFNetworking/blob/e8fde524d712e5d369c43f355bd2f01c91ad0359/AFNetworking/AFURLSessionManager.m) 的做法。
+
+```
+    if (NSClassFromString(@"NSURLSessionTask")) {
+        /**
+         iOS 7 and iOS 8 differ in NSURLSessionTask implementation, which makes the next bit of code a bit tricky.
+         Many Unit Tests have been built to validate as much of this behavior has possible.
+         Here is what we know:
+            - NSURLSessionTasks are implemented with class clusters, meaning the class you request from the API isn't actually the type of class you will get back.
+            - Simply referencing `[NSURLSessionTask class]` will not work. You need to ask an `NSURLSession` to actually create an object, and grab the class from there.
+            - On iOS 7, `localDataTask` is a `__NSCFLocalDataTask`, which inherits from `__NSCFLocalSessionTask`, which inherits from `__NSCFURLSessionTask`.
+            - On iOS 8, `localDataTask` is a `__NSCFLocalDataTask`, which inherits from `__NSCFLocalSessionTask`, which inherits from `NSURLSessionTask`.
+            - On iOS 7, `__NSCFLocalSessionTask` and `__NSCFURLSessionTask` are the only two classes that have their own implementations of `resume` and `suspend`, and `__NSCFLocalSessionTask` DOES NOT CALL SUPER. This means both classes need to be swizzled.
+            - On iOS 8, `NSURLSessionTask` is the only class that implements `resume` and `suspend`. This means this is the only class that needs to be swizzled.
+            - Because `NSURLSessionTask` is not involved in the class hierarchy for every version of iOS, its easier to add the swizzled methods to a dummy class and manage them there.
+        
+         Some Assumptions:
+            - No implementations of `resume` or `suspend` call super. If this were to change in a future version of iOS, we'd need to handle it.
+            - No background task classes override `resume` or `suspend`
+         
+         The current solution:
+            1) Grab an instance of `__NSCFLocalDataTask` by asking an instance of `NSURLSession` for a data task.
+            2) Grab a pointer to the original implementation of `af_resume`
+            3) Check to see if the current class has an implementation of resume. If so, continue to step 4.
+            4) Grab the super class of the current class.
+            5) Grab a pointer for the current class to the current implementation of `resume`.
+            6) Grab a pointer for the super class to the current implementation of `resume`.
+            7) If the current class implementation of `resume` is not equal to the super class implementation of `resume` AND the current implementation of `resume` is not equal to the original implementation of `af_resume`, THEN swizzle the methods
+            8) Set the current class to the super class, and repeat steps 3-8
+         */
+        NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+        NSURLSession * session = [NSURLSession sessionWithConfiguration:configuration];
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnonnull"
+        NSURLSessionDataTask *localDataTask = [session dataTaskWithURL:nil];
+#pragma clang diagnostic pop
+        IMP originalAFResumeIMP = method_getImplementation(class_getInstanceMethod([self class], @selector(af_resume)));
+        Class currentClass = [localDataTask class];
+        
+        while (class_getInstanceMethod(currentClass, @selector(resume))) {
+            Class superClass = [currentClass superclass];
+            IMP classResumeIMP = method_getImplementation(class_getInstanceMethod(currentClass, @selector(resume)));
+            IMP superclassResumeIMP = method_getImplementation(class_getInstanceMethod(superClass, @selector(resume)));
+            if (classResumeIMP != superclassResumeIMP &&
+                originalAFResumeIMP != classResumeIMP) {
+                [self swizzleResumeAndSuspendMethodForClass:currentClass];
+            }
+            currentClass = [currentClass superclass];
+        }
+        
+        [localDataTask cancel];
+        [session finishTasksAndInvalidate];
+    }
+```
+
+> `_nbs_slow_isClassItSelfHasMethod` 方法中会调用 `class_copyMethodList` 方法获取这个类的方法列表，注意这个方法获取的方法列表不包含父类的方法，所以 `_nbs_slow_isClassItSelfHasMethod` 方法其实就是判断 `cls` 这个类自己是不是包含 `@selector(resume)`。
+
+事实上，上面的逻辑在开源库 [FLEX](https://github.com/Flipboard/FLEX/blob/29afa5e80f86be5373c11839ea3942722f67e696/Classes/Network/PonyDebugger/FLEXNetworkObserver.m) 中也有实现，只不过实现上略有区别，**FLEX** 会根据系统版本来区分是 hook `__NSCFLocalSessionTask`、NSURLSessionTask 和 __NSCFURLSessionTask，个人感觉听云的实现比 **FLEX** 的硬编码更优雅点。因为 `__NSCFLocalSessionTask` 和 `__NSCFURLSessionTask` 是私有类，所以采取了拆分再拼接的方式来避免审核被拒。
+
+```
++ (void)injectIntoNSURLSessionTaskResume
+{
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // In iOS 7 resume lives in __NSCFLocalSessionTask
+        // In iOS 8 resume lives in NSURLSessionTask
+        // In iOS 9 resume lives in __NSCFURLSessionTask
+        Class class = Nil;
+        if (![[NSProcessInfo processInfo] respondsToSelector:@selector(operatingSystemVersion)]) {
+            class = NSClassFromString([@[@"__", @"NSC", @"FLocalS", @"ession", @"Task"] componentsJoinedByString:@""]);
+        } else if ([[NSProcessInfo processInfo] operatingSystemVersion].majorVersion < 9) {
+            class = [NSURLSessionTask class];
+        } else {
+            class = NSClassFromString([@[@"__", @"NSC", @"FURLS", @"ession", @"Task"] componentsJoinedByString:@""]);
+        }
+        SEL selector = @selector(resume);
+        SEL swizzledSelector = [FLEXUtility swizzledSelectorForSelector:selector];
+
+        Method originalResume = class_getInstanceMethod(class, selector);
+
+        void (^swizzleBlock)(NSURLSessionTask *) = ^(NSURLSessionTask *slf) {
+            [[FLEXNetworkObserver sharedObserver] URLSessionTaskWillResume:slf];
+            ((void(*)(id, SEL))objc_msgSend)(slf, swizzledSelector);
+        };
+
+        IMP implementation = imp_implementationWithBlock(swizzleBlock);
+        class_addMethod(class, swizzledSelector, implementation, method_getTypeEncoding(originalResume));
+        Method newResume = class_getInstanceMethod(class, swizzledSelector);
+        method_exchangeImplementations(originalResume, newResume);
+    });
+}
+```
 
 ## 致谢
 
