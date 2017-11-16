@@ -1170,7 +1170,53 @@ if (r12 != 0x0) {
 * `nbs_uploadTaskWithRequest:fromData:`
 * `nbs_uploadTaskWithStreamedRequest:`
 
->
+#### 请求结束
+
+在 `finishAt` 方法中计算得到最终的响应时间，并将其赋值给 `tm_dur_end` 属性。
+
+```
+void -[_priv_NBSHTTPTransaction finishAt:](void * self, void * _cmd, double arg2) {
+	 r14 = self;
+    rbx = [r14 retain];
+    r14 = @selector(tm_pnt_send);
+    _objc_msgSend(rbx, r14);
+    xmm1 = intrinsic_xorpd(xmm1, xmm1);
+    xmm0 = intrinsic_ucomisd(xmm0, xmm1);
+    COND = xmm0 <= 0x0;
+    if (!COND) {
+            _objc_msgSend(rbx, r14);
+            xmm1 = intrinsic_movsd(xmm1, var_30);
+            xmm1 = intrinsic_subsd(xmm1, xmm0);
+            xmm0 = intrinsic_movapd(xmm0, xmm1);
+            [rbx setTm_dur_end:rdx];
+    }
+}
+```
+
+对于调用 `dataTaskWithRequest:completionHandler:` 方法发起的网络请求，请求完成的回调在 `completionHandler` 中，所以应该在完成的回调中调用 `finishAt` 方法。类似的还有 `___72-[_priv_NSURLSession_NBS nbs_downloadTaskWithRequest:completionHandler:]_block_invoke`、`___79-[_priv_NSURLSession_NBS nbs_uploadTaskWithRequest:fromData:completionHandler:]_block_invoke`等方法。
+
+```
+int ___68-[_priv_NSURLSession_NBS nbs_dataTaskWithRequest:completionHandler:]_block_invoke(int arg0, int arg1, int arg2, int arg3) {
+    rdi = *(r12 + 0x20);
+    xmm0 = intrinsic_movsd(xmm0, var_68);
+    [rdi finishAt:rdx];
+}
+```
+
+然而对于调用 `dataTaskWithRequest:` 方法的网络请求，则需要 hook `NSURLSessionTaskDelegate` 的 `URLSession:task:didCompleteWithError:` 方法。
+
+```
+void -[_priv_NBSLensAllMethodsDlgt_urlSess nbs_URLSession:task:didCompleteWithError:](void * self, void * _cmd, void * arg2, void * arg3, void * arg4) {
+    rbx = [[NSDate date] retain];
+    [rbx timeIntervalSince1970];
+    xmm0 = intrinsic_mulsd(xmm0, *0x1000b9990);
+    var_40 = intrinsic_movsd(var_40, xmm0);
+    [rbx release];
+    rax = objc_getAssociatedObject(r13, @"m_SessAssociatedKey");
+    rax = [rax retain];
+	 _objc_msgSend(r12, @selector(finishAt:), var_58);
+}
+```
 
 ## 致谢
 
