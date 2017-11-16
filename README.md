@@ -884,6 +884,7 @@ typedef void (^nbs_URLSessionDataTaskCompletionHandler)(NSData * _Nullable data,
 
 |属性|含义|
 |:---:|:----:|
+|tm\_pnt_send|请求开始时间
 |tm\_dur_dns|DNS 解析时间
 |tm\_dur_cnnct|TCP 建立连接时间
 |tm\_dur_firstP|首包时间
@@ -1146,6 +1147,16 @@ if (r12 != 0x0) {
         objc_setAssociatedObject(r12, @"m_SessAssociatedKey", r15, 0x301);
 }
 [r15 release];
+```
+
+`-[_priv_NBSHTTPTransaction startWithIP:DNSTime:atTimePoint:withObject:]` 方法会将参数的时间赋值给自己的 `tm_pnt_send` 属性。
+
+```
+-[_priv_NBSHTTPTransaction startWithIP:DNSTime:atTimePoint:withObject:] {
+    var_30 = intrinsic_movsd(var_30, arg4, rdx, arg5);
+    r12->tm_pnt_send = intrinsic_movsd(r12->tm_pnt_send, intrinsic_movsd(xmm0, var_30));
+
+}
 ```
 
 当然除了 `-[_priv_NSURLSession_NBS nbs_dataTaskWithRequest:completionHandler:]` 方法外，下面的方法也包含这段逻辑：
