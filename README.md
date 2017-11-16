@@ -916,6 +916,10 @@ typedef void (^nbs_URLSessionDataTaskCompletionHandler)(NSData * _Nullable data,
 
 通过上文的介绍我们很容易想到的一个思路：通过 hook 请求发出时的函数，记录下请求的时间，再 hook iOS SDK 中响应的回调，记录下结束的时间，计算差值即可得到这次请求的响应时间。听云的大致思路也是如此，只不过其中还有许多细节需要注意，我们接下来详细讨论它的具体实现方案。
 
+#### 请求开始
+
+听云是在 `_nbs_hook_NSURLSessionTask` 函数中 hook NSURLSessionTask 的 `resume` 方法来达到记录请求开始的目的。
+
 ```
 void _nbs_hook_NSURLSessionTask() {
     r14 = _objc_msgSend;
@@ -998,7 +1002,7 @@ void _nbs_hook_NSURLSessionTask() {
 
 我们知道在 `Foundation` 框架中有些类其实是类族（Class Cluster），比如 `NSDictionary` 和 `NSArray`。而 `NSURLSessionTask` 也是一个类族，在不同的系统版本中继承链不同，所以显然不能直接 hook `NSURLSessionTask` 类，这里采用了一个巧妙的方法，通过 `ephemeralSessionConfiguration` 方法构建一个 Ephemeral sessions（短暂的会话），它与默认会话类似，不过不会将任何数据存储到磁盘中，所有缓存，cookie 和凭据等都保存在 RAM 中并与会话相关联。这样一来当会话无效时，它们将自动清除。然后通过这个短暂会话创建了一个 session 对象，最后构建出 task 对象，并通过这个 task 对象获得真正的类。
 
-上面这种巧妙的做法其实并非听云独创，他其实是参考了 [AFNetworking](https://github.com/AFNetworking/AFNetworking/blob/e8fde524d712e5d369c43f355bd2f01c91ad0359/AFNetworking/AFURLSessionManager.m) 的做法。
+上面这种巧妙的做法其实并非听云独创，他其实是参考了 [AFNetworking](https://github.com/AFNetworking/AFNetworking/blob/e8fde524d712e5d369c43f355bd2f01c91ad0359/AFNetworking/AFURLSessionManager.m) 的做法。AFNetworking 中为了加上通知，在 `AFURLSessionManager` 中也实现了 Hook `NSURLSessionTask` 的 `resume` 和 `suspend` 方法。
 
 ```
     if (NSClassFromString(@"NSURLSessionTask")) {
@@ -1090,6 +1094,72 @@ void _nbs_hook_NSURLSessionTask() {
     });
 }
 ```
+
+上面替换原来 `resume` 的实现是通过 `imp_implementationWithBlock`实现的，而替换后的 block 如下：
+
+```
+void ___nbs_hook_NSURLSessionTask_block_invoke(int arg0, int arg1, int arg2) {
+    rbx = [[NSDate date] retain];
+    [rbx timeIntervalSince1970];
+    var_40 = intrinsic_movsd(var_40, xmm0);
+    [rbx release];
+    r15 = _is_tiaoshi_kai;
+    COND = *(int8_t *)r15 == 0x0;
+    var_50 = r13;
+    if (!COND) {
+            rax = [var_30 URL];
+            rax = [rax retain];
+            r14 = r15;
+            r15 = rax;
+            rbx = [[r15 absoluteString] retain];
+            rdx = rbx;
+            __NBSDebugLog(0x3, @"NSURLSession:start:url:%@", rdx, rcx, r8, r9, stack[2048]);
+            [rbx release];
+            rdi = r15;
+            r15 = r14;
+            [rdi release];
+    }
+    rbx = [objc_getAssociatedObject(r12, @"m_SessAssociatedKey") retain];
+    if (rbx != 0x0) {
+            xmm1 = intrinsic_movsd(xmm1, var_40);
+            xmm1 = intrinsic_mulsd(xmm1, *0x1000b9990);
+            xmm0 = intrinsic_movsd(xmm0, *0x1000b9da8);
+            [rbx startWithIP:0x0 DNSTime:var_30 atTimePoint:r8 withObject:r9];
+            [rbx setRequest:var_30];
+            [rbx setLibClassId:0x1];
+    }
+    else {
+            if (*(int8_t *)r15 != 0x0) {
+                    __NBSDebugLog(0x3, cfstring_r, rdx, rcx, r8, r9, stack[2048]);
+            }
+    }
+}
+```
+
+上面伪代码中将 `___nbs_hook_NSURLSessionTask_block_invoke` 中不相关的逻辑忽略了，可以看到其中生成了时间戳，并将该时间戳
+当做 `[rbx startWithIP:0x0 DNSTime:var_30 atTimePoint:r8 withObject:r9]` 方法的入参，`rbx` 为 `_priv_NBSHTTPTransaction` 实例，而该实例是通过 `NSURLSessionDataTask` 的关联对象获取到的。而 `_priv_NBSHTTPTransaction` 实例的创建和关联对象的设置逻辑则在 `-[_priv_NSURLSession_NBS nbs_dataTaskWithRequest:completionHandler:]` 方法中。
+
+```
+r12 = [[var_30 nbs_dataTaskWithRequest:r13 completionHandler:0x0] retain];
+r15 = [_priv_NBSHTTPTransaction new];
+if (r12 != 0x0) {
+        objc_setAssociatedObject(r12, @"m_SessAssociatedKey", r15, 0x301);
+}
+[r15 release];
+```
+
+当然除了 `-[_priv_NSURLSession_NBS nbs_dataTaskWithRequest:completionHandler:]` 方法外，下面的方法也包含这段逻辑：
+
+* `nbs_downloadTaskWithRequest:`
+* `nbs_downloadTaskWithRequest:completionHandler:`
+* `nbs_downloadTaskWithResumeData:completionHandler:`
+* `nbs_uploadTaskWithRequest:fromData:completionHandler:`
+* `nbs_uploadTaskWithRequest:fromFile:completionHandler:`
+* `nbs_uploadTaskWithRequest:fromFile:`
+* `nbs_uploadTaskWithRequest:fromData:`
+* `nbs_uploadTaskWithStreamedRequest:`
+
+>
 
 ## 致谢
 
